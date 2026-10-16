@@ -1,4 +1,4 @@
-import os
+import time
 import math
 import random
 import itertools
@@ -9,6 +9,7 @@ from statistics import mean
 from src.weights import Weights
 from src.inventory import Inventory
 from players.player0 import Player
+from shapely.geometry import LineString
 from src.pieces import Piece, Connector, PieceType, ConnectorType
 from src.enclosure import Construction, validate_construction, score_construction, compute_faces, walk_points
 
@@ -20,19 +21,36 @@ class EvolvingConstruction(Construction):
         self.depth = depth
         self.child_type = child_type
 
+    def remove_self_intersecting_neighbours(self, neighbours, type_of_neighbours):
+        old_len = len(neighbours)
+        neighbours = [x for x in neighbours if self.has_no_self_overlap(x)]
+        new_len = len(neighbours)
+        if new_len != old_len and type_of_neighbours != "modify_rectangular_bumps":
+            pass
+        return neighbours
+
     def get_neighbours(self, face_vs_inventory, room):
         """
         Possible actions from one state:
         generate connector x unit x position candidates
         """
         n1 = self.modify_opposite_faces(face_vs_inventory)
+        n1 = self.remove_self_intersecting_neighbours(n1, "modify_opposite_faces")
         n2 = self.translate(room)
         n3 = self.modify_rectangular_bumps(face_vs_inventory)
+        n3 = self.remove_self_intersecting_neighbours(n3, "modify_rectangular_bumps")
         n4 = self.rotate()
         n5 = self.add_diagonal_connectors(face_vs_inventory)
+        n5 = self.remove_self_intersecting_neighbours(n5, "add_diagonal_connectors")
         neighbours = n1 + n2 + n3 + n4 + n5
         random.shuffle(neighbours)
         return neighbours
+
+    @staticmethod
+    def has_no_self_overlap(construction):
+        points = walk_points(construction)[:len(construction.pieces)]
+        boundary = LineString(points + [points[0]])
+        return boundary.is_simple
 
     def add_diagonal_connectors(self, face_vs_inventory):
         neighbours = list()
@@ -590,50 +608,59 @@ class Player9(Player):
         return None
 
     def build_enclosure(self) -> Construction | None:
-        base_construction = self.get_smallest_rectangle()
-        if base_construction is None:
-            print("No small enclosure found to start with...")
-            return None
-        final_construction, final_score = self.run_local_search_for_a_location(base_construction)
-        validation_results = validate_construction(final_construction, self.room, self.inventory)
-        if not validation_results.valid:
-            return None
-        if final_score < 0:
-            return None
-        return final_construction
+        construction_1, score_1 = self.generate_enclosure_from_local_search_approach()
+        best_construction, best_score = construction_1, score_1
+        if best_score < 0:
+            best_construction = None
+        return best_construction
 
-    def run_local_search_for_a_location(self, parent, max_state_count=10000):
+    def generate_enclosure_from_local_search_approach(self, no_attempts=3):
+        print("Generating enclosure from local search approach...")
+        results = list()
+        for i in range(no_attempts):
+            initial_construction = self.get_smallest_rectangle()
+            if initial_construction is None:
+                print("No small enclosure found to start with...")
+                return None, -1
+            final_construction, final_score = self.run_local_search_for_a_location(initial_construction)
+            print("Attempt:", i, "Score of final construction:", final_score)
+            results.append((final_construction, final_score))
+        results = sorted(results, key=lambda x: x[1], reverse=True)
+        final_construction, final_score = results[0]
+        return final_construction, final_score
+
+
+    def run_local_search_for_a_location(self, parent, max_time_in_seconds=20):
+        st = time.time()
         root_validation_result = validate_construction(parent, self.room, self.inventory)
         root_score = score_construction(root_validation_result, self.weights) if root_validation_result.valid else float("-inf")
-        best_construction, best_score = parent, root_score
-        print("best_construction:", best_construction)
-        print("best_score:", root_score)
 
+        last_log_time = 0
         state_count = 0
-        temperature = max_state_count
-        while state_count < max_state_count:
+        best_construction, best_score = parent, root_score
+        while True:
+            seconds_passed = time.time() - st
+            temperature = math.pow(2, (max_time_in_seconds - seconds_passed))
+            if seconds_passed > last_log_time:
+                # print("States evaluated:", state_count, "Seconds passed:", seconds_passed, "/", max_time_in_seconds, "Temperature:", temperature)
+                last_log_time = last_log_time + 1
+            if seconds_passed > max_time_in_seconds:
+                break
+            state_count = state_count + 1
             parent_validation_result = validate_construction(parent, self.room, self.inventory)
             parent_score = score_construction(parent_validation_result, self.weights)
             neighbours = parent.get_neighbours(self.face_vs_inventory, self.room)
             random.shuffle(neighbours)
             for neighbour in neighbours:
-                state_count = state_count + 1
                 neighbour_validation_result = validate_construction(neighbour, self.room, self.inventory)
                 neighbour_score = score_construction(neighbour_validation_result, self.weights) if neighbour_validation_result.valid else float("-inf")
                 if neighbour_score > best_score:
+                    # print("Improved score from", best_score, "to", neighbour_score, "@", state_count, " | seconds passed:", seconds_passed, "/", max_time_in_seconds)
                     best_score = neighbour_score
                     best_construction = neighbour
-                    print("New best score:", best_score)
-                    print("New best construction:", best_construction)
-                    print("Temperature:", temperature)
-                    print()
                 gain = neighbour_score - parent_score
                 accept = gain > 0 or random.random() < math.pow(math.e, gain / temperature)
-                temperature = max(5, temperature - 1)
                 if accept:
                     parent = neighbour
                     break
-
-            if state_count % 1000 == 0:
-                print("State count:", state_count, "/", max_state_count)
         return best_construction, best_score
