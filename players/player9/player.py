@@ -11,11 +11,26 @@ from src.inventory import Inventory
 from players.player0 import Player
 from shapely.geometry import LineString
 from src.pieces import Piece, Connector, PieceType, ConnectorType
-from src.enclosure import Construction, validate_construction, score_construction, compute_faces, walk_points
+from src.enclosure import (
+    Construction,
+    validate_construction,
+    score_construction,
+    compute_faces,
+    walk_points,
+)
 
 
 class EvolvingConstruction(Construction):
-    def __init__(self, start, start_heading, pieces, connectors, left_inventory, depth, child_type=""):
+    def __init__(
+        self,
+        start,
+        start_heading,
+        pieces,
+        connectors,
+        left_inventory,
+        depth,
+        child_type="",
+    ):
         super().__init__(start, start_heading, pieces, connectors)
         self.left_inventory = deepcopy(left_inventory)
         self.depth = depth
@@ -48,7 +63,7 @@ class EvolvingConstruction(Construction):
 
     @staticmethod
     def has_no_self_overlap(construction):
-        points = walk_points(construction)[:len(construction.pieces)]
+        points = walk_points(construction)[: len(construction.pieces)]
         boundary = LineString(points + [points[0]])
         return boundary.is_simple
 
@@ -68,13 +83,16 @@ class EvolvingConstruction(Construction):
             (i1, i2)
             for i1, i2 in itertools.product(range(n), range(n))
             if (
-                    i1 > i2
-                    and math.isclose(abs(piece_headings[i1] - piece_headings[i2]),180, abs_tol=1e-7,
-            )
-                    and self.connectors[(i1 + 1) % n].connector_type == ConnectorType.RIGHT
-                    and not self.connectors[(i1 + 1) % n].reflex
-                    and self.connectors[(i2 + 1) % n].connector_type == ConnectorType.RIGHT
-                    and not self.connectors[(i2 + 1) % n].reflex
+                i1 > i2
+                and math.isclose(
+                    abs(piece_headings[i1] - piece_headings[i2]),
+                    180,
+                    abs_tol=1e-7,
+                )
+                and self.connectors[(i1 + 1) % n].connector_type == ConnectorType.RIGHT
+                and not self.connectors[(i1 + 1) % n].reflex
+                and self.connectors[(i2 + 1) % n].connector_type == ConnectorType.RIGHT
+                and not self.connectors[(i2 + 1) % n].reflex
             )
         ]
 
@@ -87,8 +105,12 @@ class EvolvingConstruction(Construction):
                 f1_inventory = deepcopy(f1_inventory)
                 f2_inventory = deepcopy(f2_inventory)
                 # Note: face_vs_inventory adds one extra straight connector for addition
-                f1_inventory["connectors"]["straight"] = f1_inventory["connectors"]["straight"] - 1
-                f2_inventory["connectors"]["straight"] = f2_inventory["connectors"]["straight"] - 1
+                f1_inventory["connectors"]["straight"] = (
+                    f1_inventory["connectors"]["straight"] - 1
+                )
+                f2_inventory["connectors"]["straight"] = (
+                    f2_inventory["connectors"]["straight"] - 1
+                )
 
                 if not self.exists_in_inventory(inventory_left, f1_inventory):
                     continue
@@ -100,10 +122,17 @@ class EvolvingConstruction(Construction):
                 f2_pieces, _ = self.get_actual_inventory(f2_inventory)
                 self.update_inventory(inventory_left, f2_inventory)
 
-                inventory_left["connectors"]["diagonal"] = inventory_left["connectors"]["diagonal"] - 4
-                inventory_left["connectors"]["right"] = inventory_left["connectors"]["right"] + 2
+                inventory_left["connectors"]["diagonal"] = (
+                    inventory_left["connectors"]["diagonal"] - 4
+                )
+                inventory_left["connectors"]["right"] = (
+                    inventory_left["connectors"]["right"] + 2
+                )
 
-                index_vs_new_pieces = {f1_index: f1_pieces, f2_index: f2_pieces,}
+                index_vs_new_pieces = {
+                    f1_index: f1_pieces,
+                    f2_index: f2_pieces,
+                }
                 new_pieces, new_connectors = list(), list()
                 for idx in range(len(self.pieces)):
                     new_pieces.append(self.pieces[idx])
@@ -117,7 +146,10 @@ class EvolvingConstruction(Construction):
                         inserted_pieces = index_vs_new_pieces[idx]
                         new_pieces.extend(inserted_pieces)
                         new_connectors.append(Connector(ConnectorType.DIAGONAL, False))
-                        new_connectors.extend(Connector(ConnectorType.STRAIGHT) for _ in range(len(inserted_pieces) - 1))
+                        new_connectors.extend(
+                            Connector(ConnectorType.STRAIGHT)
+                            for _ in range(len(inserted_pieces) - 1)
+                        )
 
                 neighbour = EvolvingConstruction(
                     start=self.start,
@@ -130,10 +162,6 @@ class EvolvingConstruction(Construction):
                 )
                 neighbours.append(neighbour)
         return neighbours
-
-
-
-
 
     def rotate(self):
         thetas = [random.randint(-180, 180) for _ in range(6)]
@@ -150,7 +178,6 @@ class EvolvingConstruction(Construction):
             for theta in thetas
         ]
 
-
     def translate(self, room):
         min_x, min_y, max_x, max_y = room.polygon.bounds
         step_x = (max_x - min_x) / random.randint(1, 100)
@@ -158,20 +185,21 @@ class EvolvingConstruction(Construction):
         deltas = [
             (dx, dy)
             for dx, dy in itertools.product(
-                [-step_x, 0, step_x], [-step_y, 0, step_y],
+                [-step_x, 0, step_x],
+                [-step_y, 0, step_y],
             )
             if dx != 0 or dy != 0
         ]
         x, y = self.start
         return [
             EvolvingConstruction(
-                start=(x+del_x, y+del_y),
+                start=(x + del_x, y + del_y),
                 start_heading=self.start_heading,
                 pieces=self.pieces,
                 connectors=self.connectors,
                 left_inventory=self.left_inventory,
                 depth=self.depth + 1,
-                child_type=self.child_type+"<translate:{}|{}>".format(del_x, del_y),
+                child_type=self.child_type + "<translate:{}|{}>".format(del_x, del_y),
             )
             for del_x, del_y in deltas
         ]
@@ -185,7 +213,10 @@ class EvolvingConstruction(Construction):
 
         n = len(self.pieces)
         opposite_face_indices = [
-            (i1, i2) for i1, i2 in itertools.product(range(len(self.pieces)), range(len(self.pieces)))
+            (i1, i2)
+            for i1, i2 in itertools.product(
+                range(len(self.pieces)), range(len(self.pieces))
+            )
             if i1 > i2 and abs(piece_headings[i1] - piece_headings[i2]) % 360 == 180
         ]
         opposite_face_indices = [
@@ -204,29 +235,35 @@ class EvolvingConstruction(Construction):
                 f1_inventory = random.choice(face_inventory_options)
                 if not self.exists_in_inventory(left_inventory, f1_inventory):
                     continue
-                f1_new_pieces, f1_new_connectors = self.get_actual_inventory(f1_inventory)
+                f1_new_pieces, f1_new_connectors = self.get_actual_inventory(
+                    f1_inventory
+                )
                 self.update_inventory(left_inventory, f1_inventory)
                 new_pieces = (
-                        self.pieces[:f1_idx + 1]
-                        + f1_new_pieces
-                        + self.pieces[f1_idx + 1:]
+                    self.pieces[: f1_idx + 1]
+                    + f1_new_pieces
+                    + self.pieces[f1_idx + 1 :]
                 )
                 new_connectors = (
-                        self.connectors[:f1_idx + 1]
-                        + [Connector(ConnectorType.STRAIGHT) for _ in f1_new_pieces]
-                        + self.connectors[f1_idx + 1:]
+                    self.connectors[: f1_idx + 1]
+                    + [Connector(ConnectorType.STRAIGHT) for _ in f1_new_pieces]
+                    + self.connectors[f1_idx + 1 :]
                 )
 
                 f2_inventory = random.choice(face_inventory_options)
                 if not self.exists_in_inventory(left_inventory, f2_inventory):
                     continue
-                f2_new_pieces, f2_new_connectors = self.get_actual_inventory(f2_inventory)
+                f2_new_pieces, f2_new_connectors = self.get_actual_inventory(
+                    f2_inventory
+                )
                 self.update_inventory(left_inventory, f2_inventory)
-                new_pieces = new_pieces[:f2_idx + 1] + f2_new_pieces + new_pieces[f2_idx + 1:]
+                new_pieces = (
+                    new_pieces[: f2_idx + 1] + f2_new_pieces + new_pieces[f2_idx + 1 :]
+                )
                 new_connectors = (
-                        new_connectors[:f2_idx + 1]
-                        + [Connector(ConnectorType.STRAIGHT) for _ in f2_new_pieces]
-                        + new_connectors[f2_idx + 1:]
+                    new_connectors[: f2_idx + 1]
+                    + [Connector(ConnectorType.STRAIGHT) for _ in f2_new_pieces]
+                    + new_connectors[f2_idx + 1 :]
                 )
 
                 neighbours.append(
@@ -253,18 +290,13 @@ class EvolvingConstruction(Construction):
         headings = [self.start_heading % 360]
 
         for connector in self.connectors[1:]:
-            headings.append(
-                (headings[-1] + connector.turn_angle()) % 360
-            )
+            headings.append((headings[-1] + connector.turn_angle()) % 360)
 
-        def make_neighbour(start_index, old_count,
-                           replacement_pieces, replacement_headings,
-                           child_type):
+        def make_neighbour(
+            start_index, old_count, replacement_pieces, replacement_headings, child_type
+        ):
             # Rotate the original loop so the replaced path comes first.
-            indices = [
-                (start_index + offset) % n
-                for offset in range(n)
-            ]
+            indices = [(start_index + offset) % n for offset in range(n)]
 
             remaining_indices = indices[old_count:]
 
@@ -279,20 +311,14 @@ class EvolvingConstruction(Construction):
             new_connectors = list()
 
             for i, heading in enumerate(new_headings):
-                turn = (
-                               heading - new_headings[i - 1] + 180
-                       ) % 360 - 180
+                turn = (heading - new_headings[i - 1] + 180) % 360 - 180
 
                 if math.isclose(turn, 0, abs_tol=1e-7):
                     connector = Connector(ConnectorType.STRAIGHT)
                 elif math.isclose(abs(turn), 90, abs_tol=1e-7):
-                    connector = Connector(
-                        ConnectorType.RIGHT, reflex=turn < 0
-                    )
+                    connector = Connector(ConnectorType.RIGHT, reflex=turn < 0)
                 elif math.isclose(abs(turn), 45, abs_tol=1e-7):
-                    connector = Connector(
-                        ConnectorType.DIAGONAL, reflex=turn < 0
-                    )
+                    connector = Connector(ConnectorType.DIAGONAL, reflex=turn < 0)
                 else:
                     # For example, a 180-degree reversal.
                     return
@@ -310,20 +336,19 @@ class EvolvingConstruction(Construction):
                     kind = "gates" if piece.is_gate else "walls"
                     key = str(piece.length)
                     left_inventory[kind][key] = (
-                            left_inventory[kind].get(key, 0) + change
+                        left_inventory[kind].get(key, 0) + change
                     )
 
                 for connector in connectors:
                     key = connector.connector_type.value
                     left_inventory["connectors"][key] = (
-                            left_inventory["connectors"].get(key, 0)
-                            + change
+                        left_inventory["connectors"].get(key, 0) + change
                     )
 
             if any(
-                    count < 0
-                    for inventory in left_inventory.values()
-                    for count in inventory.values()
+                count < 0
+                for inventory in left_inventory.values()
+                for count in inventory.values()
             ):
                 return
 
@@ -351,17 +376,14 @@ class EvolvingConstruction(Construction):
                 max_count = 1
 
                 while (
-                        max_count < n - 1
-                        and self.connectors[
-                            (start_index + max_count) % n
-                        ].is_straight()
+                    max_count < n - 1
+                    and self.connectors[(start_index + max_count) % n].is_straight()
                 ):
                     max_count += 1
 
                 old_count = random.randint(1, max_count)
                 base_indices = [
-                    (start_index + offset) % n
-                    for offset in range(old_count)
+                    (start_index + offset) % n for offset in range(old_count)
                 ]
                 base_pieces = [self.pieces[i] for i in base_indices]
                 base_heading = headings[start_index]
@@ -377,27 +399,17 @@ class EvolvingConstruction(Construction):
                 joining_face1 = random.choice(options)
                 joining_face2 = random.choice(options)
 
-                joining_pieces1, _ = self.get_actual_inventory(
-                    joining_face1
-                )
-                joining_pieces2, _ = self.get_actual_inventory(
-                    joining_face2
-                )
+                joining_pieces1, _ = self.get_actual_inventory(joining_face1)
+                joining_pieces2, _ = self.get_actual_inventory(joining_face2)
 
                 # Try both sides: an outward bump or an inward notch.
                 for turn in [-90, 90]:
-                    replacement_pieces = (
-                            joining_pieces1
-                            + base_pieces
-                            + joining_pieces2
-                    )
+                    replacement_pieces = joining_pieces1 + base_pieces + joining_pieces2
 
                     replacement_headings = (
-                            [(base_heading + turn) % 360]
-                            * len(joining_pieces1)
-                            + [base_heading] * len(base_pieces)
-                            + [(base_heading - turn) % 360]
-                            * len(joining_pieces2)
+                        [(base_heading + turn) % 360] * len(joining_pieces1)
+                        + [base_heading] * len(base_pieces)
+                        + [(base_heading - turn) % 360] * len(joining_pieces2)
                     )
 
                     make_neighbour(
@@ -405,9 +417,7 @@ class EvolvingConstruction(Construction):
                         old_count,
                         replacement_pieces,
                         replacement_headings,
-                        "<add_bump:{}|{}>".format(
-                            joining_length, turn
-                        ),
+                        "<add_bump:{}|{}>".format(joining_length, turn),
                     )
 
         # REMOVE: flatten three consecutive faces when the first and
@@ -422,9 +432,7 @@ class EvolvingConstruction(Construction):
             if len(faces) < 4:
                 break
 
-            if not math.isclose(
-                    face1.length, face3.length, abs_tol=1e-7
-            ):
+            if not math.isclose(face1.length, face3.length, abs_tol=1e-7):
                 continue
 
             heading1 = headings[face1.piece_indices[0]]
@@ -438,26 +446,21 @@ class EvolvingConstruction(Construction):
                 continue
 
             if not any(
-                    math.isclose(corner_gap, angle, abs_tol=1e-7)
-                    for angle in [90, 270]
+                math.isclose(corner_gap, angle, abs_tol=1e-7) for angle in [90, 270]
             ):
                 continue
 
-            replacement_pieces = [
-                self.pieces[i] for i in face2.piece_indices
-            ]
+            replacement_pieces = [self.pieces[i] for i in face2.piece_indices]
 
             make_neighbour(
                 start_index=face1.piece_indices[0],
                 old_count=(
-                        len(face1.piece_indices)
-                        + len(face2.piece_indices)
-                        + len(face3.piece_indices)
+                    len(face1.piece_indices)
+                    + len(face2.piece_indices)
+                    + len(face3.piece_indices)
                 ),
                 replacement_pieces=replacement_pieces,
-                replacement_headings=(
-                        [heading2] * len(replacement_pieces)
-                ),
+                replacement_headings=([heading2] * len(replacement_pieces)),
                 child_type="<remove_bump>",
             )
         return neighbours
@@ -465,35 +468,41 @@ class EvolvingConstruction(Construction):
     @staticmethod
     def get_actual_inventory(face_inventory):
         pieces, connectors = list(), list()
-        for l, f in face_inventory["walls"].items():
-            pieces.extend([Piece(PieceType.WALL, l)] * f)
-        for l, f in face_inventory["gates"].items():
-            pieces.extend([Piece(PieceType.GATE, l)] * f)
-        for ct, f in face_inventory["connectors"].items():
-            connectors.extend([Connector(ConnectorType(ct), False)] * f)
+        for length, freq in face_inventory["walls"].items():
+            pieces.extend([Piece(PieceType.WALL, length)] * freq)
+        for length, freq in face_inventory["gates"].items():
+            pieces.extend([Piece(PieceType.GATE, length)] * freq)
+        for ctype, freq in face_inventory["connectors"].items():
+            connectors.extend([Connector(ConnectorType(ctype), False)] * freq)
         return pieces, connectors
 
     @staticmethod
     def exists_in_inventory(total_inventory, face_inventory):
-        for l, f in face_inventory["walls"].items():
-            if total_inventory["walls"][str(l)] < f:
+        for length, freq in face_inventory["walls"].items():
+            if total_inventory["walls"][str(length)] < freq:
                 return False
-        for l, f in face_inventory["gates"].items():
-            if total_inventory["gates"][str(l)] < f:
+        for length, freq in face_inventory["gates"].items():
+            if total_inventory["gates"][str(length)] < freq:
                 return False
-        for ct, f in face_inventory["connectors"].items():
-            if total_inventory["connectors"][ct] < f:
+        for ctype, freq in face_inventory["connectors"].items():
+            if total_inventory["connectors"][ctype] < freq:
                 return False
         return True
 
     @staticmethod
     def update_inventory(total_inventory, face_inventory):
-        for l, f in face_inventory["walls"].items():
-            total_inventory["walls"][str(l)] = total_inventory["walls"][str(l)] - f
-        for l, f in face_inventory["gates"].items():
-            total_inventory["gates"][str(l)] = total_inventory["gates"][str(l)] - f
-        for ct, f in face_inventory["connectors"].items():
-            total_inventory["connectors"][ct] = total_inventory["connectors"][ct] - f
+        for length, freq in face_inventory["walls"].items():
+            total_inventory["walls"][str(length)] = (
+                total_inventory["walls"][str(length)] - freq
+            )
+        for length, freq in face_inventory["gates"].items():
+            total_inventory["gates"][str(length)] = (
+                total_inventory["gates"][str(length)] - freq
+            )
+        for ctype, freq in face_inventory["connectors"].items():
+            total_inventory["connectors"][ctype] = (
+                total_inventory["connectors"][ctype] - freq
+            )
         return True
 
     def __str__(self):
@@ -559,6 +568,7 @@ class Player9(Player):
                 )
                 if count:
                     chosen.pop()
+
         search(0, 0, 0, 0)
         return dict(sorted(catalog.items()))
 
@@ -579,21 +589,34 @@ class Player9(Player):
                         for face4 in self.face_vs_inventory[b]:
                             faces = [face1, face2, face3, face4]
                             remaining = deepcopy(inventory)
-                            remaining["connectors"]["right"] = remaining["connectors"]["right"] - 4
+                            remaining["connectors"]["right"] = (
+                                remaining["connectors"]["right"] - 4
+                            )
                             pieces, connectors = list(), list()
                             possible = True
                             for face in faces:
                                 required = deepcopy(face)
                                 # Note that catalog contains an extra connector.
-                                required["connectors"]["straight"] = required["connectors"]["straight"] - 1
-                                if not EvolvingConstruction.exists_in_inventory(remaining, required):
+                                required["connectors"]["straight"] = (
+                                    required["connectors"]["straight"] - 1
+                                )
+                                if not EvolvingConstruction.exists_in_inventory(
+                                    remaining, required
+                                ):
                                     possible = False
                                     break
-                                EvolvingConstruction.update_inventory(remaining, required)
-                                face_pieces, _ = (EvolvingConstruction.get_actual_inventory(face))
+                                EvolvingConstruction.update_inventory(
+                                    remaining, required
+                                )
+                                face_pieces, _ = (
+                                    EvolvingConstruction.get_actual_inventory(face)
+                                )
                                 pieces.extend(face_pieces)
                                 connectors.append(Connector(ConnectorType.RIGHT))
-                                connectors.extend(Connector(ConnectorType.STRAIGHT) for _ in range(len(face_pieces) - 1))
+                                connectors.extend(
+                                    Connector(ConnectorType.STRAIGHT)
+                                    for _ in range(len(face_pieces) - 1)
+                                )
 
                             if possible and any(p.is_gate for p in pieces):
                                 return EvolvingConstruction(
@@ -603,7 +626,7 @@ class Player9(Player):
                                     connectors=connectors,
                                     left_inventory=remaining,
                                     depth=0,
-                                    child_type="smallest"
+                                    child_type="smallest",
                                 )
         return None
 
@@ -622,18 +645,25 @@ class Player9(Player):
             if initial_construction is None:
                 print("No small enclosure found to start with...")
                 return None, -1
-            final_construction, final_score = self.run_local_search_for_a_location(initial_construction)
+            final_construction, final_score = self.run_local_search_for_a_location(
+                initial_construction
+            )
             print("Attempt:", i, "Score of final construction:", final_score)
             results.append((final_construction, final_score))
         results = sorted(results, key=lambda x: x[1], reverse=True)
         final_construction, final_score = results[0]
         return final_construction, final_score
 
-
     def run_local_search_for_a_location(self, parent, max_time_in_seconds=20):
         st = time.time()
-        root_validation_result = validate_construction(parent, self.room, self.inventory)
-        root_score = score_construction(root_validation_result, self.weights) if root_validation_result.valid else float("-inf")
+        root_validation_result = validate_construction(
+            parent, self.room, self.inventory
+        )
+        root_score = (
+            score_construction(root_validation_result, self.weights)
+            if root_validation_result.valid
+            else float("-inf")
+        )
 
         last_log_time = 0
         state_count = 0
@@ -647,19 +677,29 @@ class Player9(Player):
             if seconds_passed > max_time_in_seconds:
                 break
             state_count = state_count + 1
-            parent_validation_result = validate_construction(parent, self.room, self.inventory)
+            parent_validation_result = validate_construction(
+                parent, self.room, self.inventory
+            )
             parent_score = score_construction(parent_validation_result, self.weights)
             neighbours = parent.get_neighbours(self.face_vs_inventory, self.room)
             random.shuffle(neighbours)
             for neighbour in neighbours:
-                neighbour_validation_result = validate_construction(neighbour, self.room, self.inventory)
-                neighbour_score = score_construction(neighbour_validation_result, self.weights) if neighbour_validation_result.valid else float("-inf")
+                neighbour_validation_result = validate_construction(
+                    neighbour, self.room, self.inventory
+                )
+                neighbour_score = (
+                    score_construction(neighbour_validation_result, self.weights)
+                    if neighbour_validation_result.valid
+                    else float("-inf")
+                )
                 if neighbour_score > best_score:
                     # print("Improved score from", best_score, "to", neighbour_score, "@", state_count, " | seconds passed:", seconds_passed, "/", max_time_in_seconds)
                     best_score = neighbour_score
                     best_construction = neighbour
                 gain = neighbour_score - parent_score
-                accept = gain > 0 or random.random() < math.pow(math.e, gain / temperature)
+                accept = gain > 0 or random.random() < math.pow(
+                    math.e, gain / temperature
+                )
                 if accept:
                     parent = neighbour
                     break
